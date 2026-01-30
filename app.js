@@ -8,7 +8,7 @@ const app = express();
 
 const PORT = process.env.PORT || 3000;
 
-// --- CONFIGURACIÓN CON TUS CREDENCIALES ---
+// --- CREDENCIALES ---
 cloudinary.config({ 
   cloud_name: 'dvlbsl16g', 
   api_key: '721617469253873', 
@@ -16,7 +16,7 @@ cloudinary.config({
 });
 
 mongoose.connect("mongodb+srv://admin:biblio1789@cluster0.5de0hkj.mongodb.net/?appName=Cluster0")
-  .then(() => console.log("🚀 SISTEMA COMPLETO CONECTADO"));
+  .then(() => console.log("🚀 Sistema con Borrado de Préstamos Activo"));
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -49,7 +49,15 @@ app.post('/auth', async (req, res) => {
     }
     const u = await User.findOne({ user, pass });
     if (u) { req.session.uid = u._id; req.session.rol = u.rol; req.session.u = u.user; res.redirect('/'); }
-    else res.send('Error de acceso. <a href="/">Volver</a>');
+    else res.send('Error de acceso.');
+});
+
+// --- NUEVA RUTA: BORRAR PRÉSTAMO (DEVOLUCIÓN) ---
+app.post('/admin/borrar-prestamo/:id', async (req, res) => {
+    if (req.session.rol === 'admin') {
+        await Reserva.findByIdAndDelete(req.params.id);
+    }
+    res.redirect('/');
 });
 
 app.post('/admin/subir-logo', upload.single('archivoPng'), async (req, res) => {
@@ -131,9 +139,8 @@ app.get('/', async (req, res) => {
             <form action="/auth" method="POST">
                 <input name="user" placeholder="Usuario" required>
                 <input name="pass" type="password" placeholder="Contraseña" required>
-                <input name="pin" placeholder="PIN Admin (Opcional)">
+                <input name="pin" placeholder="PIN Admin">
                 <button name="accion" value="login" style="background:#3498db; color:white;">Entrar</button>
-                <button name="accion" value="registro" style="background:none; color:#94a3b8; font-size:0.8em;">Registrarse</button>
             </form>
         </div>
     `);
@@ -159,9 +166,8 @@ app.get('/', async (req, res) => {
             .tab.active { background:${u.color}; color:white; }
             .container { max-width:450px; margin:140px auto 40px; padding:0 20px; }
             .card { padding:15px; margin-bottom:15px; position:relative; }
-            .btn-user { position:fixed; bottom:25px; left:25px; width:55px; height:55px; border-radius:50%; z-index:2000; border:2px solid white; background:${u.color}; display:flex; justify-content:center; align-items:center; cursor:pointer; overflow:hidden; box-shadow: 0 5px 15px rgba(0,0,0,0.4); }
+            .btn-user { position:fixed; bottom:25px; left:25px; width:55px; height:55px; border-radius:50%; z-index:2000; border:2px solid white; background:${u.color}; display:flex; justify-content:center; align-items:center; cursor:pointer; overflow:hidden; }
             .del { color:#ff7675; float:right; background:none; border:none; cursor:pointer; font-weight:bold; font-size:1.1em; }
-            .p-chip { width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,0.1); border:1px solid white; display:inline-flex; justify-content:center; align-items:center; font-size:10px; overflow:hidden; margin-right: -8px; }
         </style>
     </head>
     <body>
@@ -183,9 +189,7 @@ app.get('/', async (req, res) => {
                 ${req.session.rol === 'admin' ? `<div class="card glass"><b>Nueva Noticia</b><form action="/admin/novedad" method="POST" enctype="multipart/form-data"><input name="titulo" placeholder="Título"><textarea name="texto" placeholder="Mensaje"></textarea><input type="file" name="imagen"><button style="background:${u.color};">Publicar</button></form></div>` : ''}
                 ${novs.map(n => `<div class="glass card">
                     ${req.session.rol === 'admin' ? `<form action="/admin/borrar/nov/${n._id}" method="POST" style="float:right;"><button class="del">×</button></form>` : ''}
-                    <b style="color:${u.color}">${n.autor}</b><br>
-                    <h3 style="margin:5px 0;">${n.titulo}</h3>
-                    <p style="opacity:0.8; font-size:0.9em;">${n.texto}</p>
+                    <b style="color:${u.color}">${n.autor}</b><br><h3 style="margin:5px 0;">${n.titulo}</h3><p style="opacity:0.8; font-size:0.9em;">${n.texto}</p>
                     ${n.imagen ? `<img src="${n.imagen}" style="width:100%; border-radius:12px; margin-top:10px;">` : ''}
                 </div>`).join('')}
             </div>
@@ -205,38 +209,43 @@ app.get('/', async (req, res) => {
             </div>
 
             <div id="pre" class="section">
-                ${ress.map(r => `<div class="glass card"><b>${r.libroTitulo}</b><br><small>Reservado por: ${r.usuario} (${r.curso})</small></div>`).join('')}
+                ${ress.map(r => `
+                <div class="glass card">
+                    ${req.session.rol === 'admin' ? `
+                    <form action="/admin/borrar-prestamo/${r._id}" method="POST" style="float:right;">
+                        <button style="background:#2ecc71; color:white; width:auto; padding:5px 10px; font-size:0.7em;">✅ Devuelto</button>
+                    </form>` : ''}
+                    <b>${r.libroTitulo}</b><br>
+                    <small>Alumno: ${r.usuario} (${r.curso})</small>
+                </div>`).join('')}
             </div>
 
             <div id="tor" class="section">
                 ${req.session.rol === 'admin' ? `<div class="card glass"><b>Crear Torneo</b><form action="/admin/nuevo-torneo" method="POST"><input name="nombre" placeholder="Nombre Torneo"><input type="date" name="fecha"><button style="background:${u.color};">Crear</button></form></div>` : ''}
                 ${tors.map(t => `<div class="glass card">
                     ${req.session.rol === 'admin' ? `<form action="/admin/borrar/tor/${t._id}" method="POST" style="float:right;"><button class="del">×</button></form>` : ''}
-                    <h3 style="margin:0; color:#f1c40f;">🏆 ${t.nombre}</h3>
-                    <small>Fecha: ${t.fecha}</small>
+                    <h3 style="margin:0; color:#f1c40f;">🏆 ${t.nombre}</h3><small>Fecha: ${t.fecha}</small>
                     <div style="margin:12px 0;">
-                        ${t.participantes.map(p => `<div class="p-chip">${p.foto ? `<img src="${p.foto}" style="width:100%; height:100%; object-fit:cover;">` : p.nombre[0]}</div>`).join('')}
+                        ${t.participantes.map(p => `<div style="width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,0.1); border:1px solid white; display:inline-flex; justify-content:center; align-items:center; font-size:10px; overflow:hidden; margin-right: -8px;">${p.foto ? `<img src="${p.foto}" style="width:100%; height:100%; object-fit:cover;">` : p.nombre[0]}</div>`).join('')}
                     </div>
-                    <form action="/inscribir/${t._id}" method="POST">
-                        <button style="background:${u.color}; font-size:0.8em;">Inscribirme</button>
-                    </form>
+                    <form action="/inscribir/${t._id}" method="POST"><button style="background:${u.color}; font-size:0.8em;">Inscribirme</button></form>
                 </div>`).join('')}
             </div>
 
             <div id="adj" class="section">
                 <div class="glass card" style="text-align:center;">
-                    <div style="width:80px; height:80px; background:${u.color}; border-radius:50%; margin:0 auto 12px; border:2px solid white; display:flex; justify-content:center; align-items:center; overflow:hidden; font-size:25px;">${avatar}</div>
+                    <div style="width:80px; height:80px; background:${u.color}; border-radius:50%; margin:0 auto 12px; border:2px solid white; display:flex; justify-content:center; align-items:center; overflow:hidden;">${avatar}</div>
                     <form action="/ajustes" method="POST" enctype="multipart/form-data">
-                        <input type="file" name="foto"><input type="color" name="color" value="${u.color}" style="height:45px; padding:5px;">
-                        <button style="background:${u.color}; color:white;">Guardar Perfil</button>
+                        <input type="file" name="foto"><input type="color" name="color" value="${u.color}">
+                        <button style="background:${u.color};">Guardar</button>
                     </form>
-                    ${req.session.rol === 'admin' ? `<div style="margin-top:25px; border-top:1px solid rgba(255,255,255,0.1); padding-top:15px;">
-                        <b style="color:#f1c40f;">💎 Logo PNG de Inicio</b>
+                    ${req.session.rol === 'admin' ? `<div style="margin-top:20px; border-top:1px solid rgba(255,255,255,0.1); padding-top:15px;">
+                        <b style="color:#f1c40f;">Logo PNG Inicio</b>
                         <form action="/admin/subir-logo" method="POST" enctype="multipart/form-data">
                             <input type="file" name="archivoPng" accept="image/png" required><button style="background:#f1c40f; color:black;">Actualizar Logo</button>
                         </form>
                     </div>` : ''}
-                    <a href="/salir" style="color:#ff7675; text-decoration:none; display:block; margin-top:20px; font-weight:bold;">Cerrar Sesión</a>
+                    <a href="/salir" style="color:#ff7675; text-decoration:none; display:block; margin-top:20px;">Cerrar Sesión</a>
                 </div>
             </div>
         </div>
@@ -253,4 +262,4 @@ app.get('/', async (req, res) => {
     </html>`);
 });
 
-app.listen(PORT, () => console.log('Biblio Master 2026: Todo integrado y corregido'));
+app.listen(PORT, () => console.log('Biblio Master 2026: Todo OK'));
