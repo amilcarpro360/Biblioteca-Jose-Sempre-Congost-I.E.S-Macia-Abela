@@ -15,7 +15,7 @@ cloudinary.config({
   api_secret: 'IkWS7Rx0vD8ktW62IdWmlbhNTPk' 
 });
 const upload = multer(); 
-const MONGO_URI = "mongodb+srv://admin:biblioteca1789@cluster0.jbyog90.mongodb.net/?appName=Cluster0"; 
+const MONGO_URI = "mongodb+srv://admin:biblio1789@cluster0.5de0hkj.mongodb.net/?appName=Cluster0"; 
 mongoose.connect(MONGO_URI).then(() => console.log("Biblioteca Conectada"));
 
 // --- MODELOS ---
@@ -243,5 +243,6 @@ app.get('/', async (req, res) => {
 });
 
 app.listen(PORT, () => console.log('Biblioteca lista'));
+
 
 
