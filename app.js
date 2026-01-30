@@ -12,10 +12,10 @@ const PORT = process.env.PORT || 3000;
 cloudinary.config({ 
   cloud_name: 'dvlbsl16g', 
   api_key: '721617469253873', 
-  api_secret: 'TU_API_SECRET_AQUÍ' 
+  api_secret: 'IkWS7Rx0vD8ktW62IdWmlbhNTPk' 
 });
 const upload = multer(); 
-const MONGO_URI = "TU_LINK_DE_MONGODB_AQUÍ"; 
+const MONGO_URI = "mongodb+srv://admin:biblioteca2845@cluster0.jbyog90.mongodb.net/?appName=Cluster0"; 
 mongoose.connect(MONGO_URI).then(() => console.log("Biblioteca Conectada"));
 
 // --- MODELOS ---
@@ -243,3 +243,4 @@ app.get('/', async (req, res) => {
 });
 
 app.listen(PORT, () => console.log('Biblioteca lista'));
+
