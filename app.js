@@ -17,26 +17,26 @@ cloudinary.config({
 
 const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 3 * 1024 * 1024 }, // 3MB
+    limits: { fileSize: 3 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
         file.mimetype.startsWith('image/') ? cb(null, true) : cb(null, false);
     }
 });
 
-mongoose.connect("mongodb+srv://admin:biblio1789@cluster0.5de0hkj.mongodb.net/?appName=Cluster0").then(() => console.log("Sistema Pro Conectado"));
+mongoose.connect("mongodb+srv://admin:biblio1789@cluster0.5de0hkj.mongodb.net/?appName=Cluster0").then(() => console.log("Interfaz Glassmorphism Lista"));
 
 // --- MODELOS ---
-const Libro = mongoose.model('Libro', { titulo: String, autor: String, portada: String, reseñas: Array });
+const Libro = mongoose.model('Libro', { titulo: String, autor: String, portada: String, reseñas: { type: Array, default: [] } });
 const Reserva = mongoose.model('Reserva', { usuario: String, curso: String, libroId: String, libroTitulo: String });
-const Torneo = mongoose.model('Torneo', { nombre: String, fecha: String, participantes: Array });
+const Torneo = mongoose.model('Torneo', { nombre: String, fecha: String, participantes: { type: Array, default: [] } });
 const Novedad = mongoose.model('Novedad', { titulo: String, texto: String, imagen: String, fecha: String });
 const User = mongoose.model('User', { 
     user: String, pass: String, rol: String, color: { type: String, default: '#3498db' }, 
-    foto: String, carnet: Object 
+    foto: { type: String, default: "" }
 });
 
 app.use(express.urlencoded({ extended: true }));
-app.use(session({ secret: 'biblio-v4-super', resave: false, saveUninitialized: false }));
+app.use(session({ secret: 'glass-biblio-2026', resave: false, saveUninitialized: false }));
 
 // --- HELPERS ---
 const subirImagen = (buffer) => new Promise((resolve) => {
@@ -44,58 +44,80 @@ const subirImagen = (buffer) => new Promise((resolve) => {
     streamifier.createReadStream(buffer).pipe(s);
 });
 
-// --- RUTAS ---
+// --- RUTAS (Lógica interna se mantiene igual para que no rompa nada) ---
 app.post('/auth', async (req, res) => {
     const { user, pass, pin, accion } = req.body;
     if (accion === 'registro') {
         const rol = (pin === '2845' || pin === '3756') ? 'admin' : 'alumno';
         await new User({ user, pass, rol }).save();
-        return res.send('<body style="background:#2c3e50;color:white;font-family:sans-serif;text-align:center;padding-top:50px;"><h2>✅ ¡Cuenta Creada!</h2><a href="/" style="color:white;">Volver al inicio</a></body>');
+        return res.send('<body style="background:#000;color:white;text-align:center;padding-top:50px;font-family:sans-serif;"><h2>✅ Registro con éxito</h2><a href="/" style="color:#3498db;">Volver al Login</a></body>');
     }
     const u = await User.findOne({ user, pass });
-    if (u) { req.session.uid = u._id; req.session.rol = u.rol; res.redirect('/'); }
+    if (u) { req.session.uid = u._id; req.session.rol = u.rol; req.session.u = u.user; res.redirect('/'); }
     else res.send('Error de acceso.');
 });
 
+// (Rutas de /admin/nuevo-libro, /admin/novedad, /reservar, /devolver, /ajustes se mantienen igual)
+app.post('/admin/nuevo-libro', upload.single('portada'), async (req, res) => {
+    if (req.session.rol !== 'admin') return res.redirect('/');
+    let img = req.file ? await subirImagen(req.file.buffer) : "";
+    await new Libro({ ...req.body, portada: img }).save();
+    res.redirect('/');
+});
 app.post('/admin/novedad', upload.single('imagen'), async (req, res) => {
     if (req.session.rol !== 'admin') return res.redirect('/');
     let img = req.file ? await subirImagen(req.file.buffer) : "";
     await new Novedad({ ...req.body, imagen: img, fecha: new Date().toLocaleDateString() }).save();
     res.redirect('/');
 });
-
-// ... (Resto de rutas: /reservar, /devolver, /ajustes, /admin/nuevo-libro, /admin/nuevo-torneo se mantienen igual que la versión anterior)
-
+app.post('/admin/nuevo-torneo', async (req, res) => {
+    if (req.session.rol === 'admin') await new Torneo(req.body).save();
+    res.redirect('/');
+});
+app.post('/reservar', async (req, res) => {
+    await new Reserva({ ...req.body, usuario: req.session.u }).save();
+    res.redirect('/');
+});
+app.post('/devolver/:id', async (req, res) => {
+    const { libroId, estrellas, comentario } = req.body;
+    if (estrellas) await Libro.findByIdAndUpdate(libroId, { $push: { reseñas: { usuario: req.session.u, puntos: estrellas, texto: comentario, fecha: new Date().toLocaleDateString() } } });
+    await Reserva.findByIdAndDelete(req.params.id);
+    res.redirect('/');
+});
+app.post('/ajustes', upload.single('foto'), async (req, res) => {
+    let update = { color: req.body.color };
+    if (req.file) update.foto = await subirFoto(req.file.buffer);
+    await User.findByIdAndUpdate(req.session.uid, update);
+    res.redirect('/');
+});
 app.get('/salir', (req, res) => { req.session.destroy(); res.redirect('/'); });
 
 // --- INTERFAZ ---
 app.get('/', async (req, res) => {
-    // LOGIN CURRADO
+    const loginStyle = `
+        body { margin:0; font-family:sans-serif; background: linear-gradient(135deg, #1e2a38, #000); background-attachment: fixed; color:white; }
+        .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+        input, select, textarea { width:100%; padding:12px; margin:8px 0; border-radius:10px; border:none; background:rgba(255,255,255,0.1); color:white; outline:none; box-sizing:border-box; }
+        button { width:100%; padding:12px; border-radius:10px; border:none; background:#3498db; color:white; font-weight:bold; cursor:pointer; }
+    `;
+
     if (!req.session.uid) return res.send(`
-    <style>
-        body { margin:0; font-family:sans-serif; background:linear-gradient(135deg, #2c3e50, #000); height:100vh; display:flex; justify-content:center; align-items:center; color:white; }
-        .login-card { background:rgba(255,255,255,0.1); backdrop-filter:blur(10px); padding:40px; border-radius:20px; box-shadow:0 15px 35px rgba(0,0,0,0.5); width:320px; border:1px solid rgba(255,255,255,0.1); text-align:center; animation: fadeIn 1s ease; }
-        input { width:100%; padding:12px; margin:10px 0; border-radius:10px; border:none; background:rgba(255,255,255,0.2); color:white; outline:none; }
-        input::placeholder { color:#ccc; }
-        button { width:100%; padding:12px; border-radius:10px; border:none; background:#3498db; color:white; font-weight:bold; cursor:pointer; margin-top:10px; }
-        .reg { background:none; font-size:0.8em; color:#aaa; margin-top:15px; cursor:pointer; }
-        @keyframes fadeIn { from {opacity:0; transform:translateY(20px);} to {opacity:1; transform:translateY(0);} }
-    </style>
-    <div class="login-card">
-        <img src="URL_DE_TU_LOGO_AQUI" style="width:80px; margin-bottom:10px;">
-        <h2>Biblio System</h2>
+    <style>${loginStyle} body { height:100vh; display:flex; justify-content:center; align-items:center; }</style>
+    <div class="glass" style="padding:40px; width:300px; text-align:center;">
+        <img src="TU_LOGO_AQUI" style="width:70px; margin-bottom:20px;">
+        <h2 style="margin:0 0 20px;">Biblio App</h2>
         <form action="/auth" method="POST">
             <input name="user" placeholder="Usuario" required>
             <input name="pass" type="password" placeholder="Contraseña" required>
-            <input name="pin" placeholder="PIN Admin (Opcional)">
+            <input name="pin" placeholder="PIN Admin">
             <button name="accion" value="login">Iniciar Sesión</button>
-            <button name="accion" value="registro" class="reg">¿No tienes cuenta? Regístrate</button>
+            <button name="accion" value="registro" style="background:none; color:#888; font-size:0.8em; margin-top:15px;">Crear una cuenta nueva</button>
         </form>
     </div>`);
 
     const u = await User.findById(req.session.uid);
     const libros = await Libro.find();
-    const reservas = await Reserva.find(req.session.rol === 'admin' ? {} : { usuario: u.user });
+    const misReservas = await Reserva.find(req.session.rol === 'admin' ? {} : { usuario: u.user });
     const novedades = await Novedad.find().sort({ _id: -1 });
     const torneos = await Torneo.find();
     const avatar = u.foto ? `<img src="${u.foto}" style="width:100%; height:100%; object-fit:cover; border-radius:50%">` : u.user[0].toUpperCase();
@@ -105,86 +127,94 @@ app.get('/', async (req, res) => {
     <head>
         <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-            /* ANIMACION DE INICIO (SPLASH) */
-            #splash { position:fixed; top:0; left:0; width:100%; height:100%; background:white; z-index:1000; display:flex; justify-content:center; align-items:center; animation: fadeOut 2s forwards; animation-delay: 1.5s; }
+            ${loginStyle}
+            #splash { position:fixed; top:0; left:0; width:100%; height:100%; background:#121212; z-index:2000; display:flex; justify-content:center; align-items:center; animation: fadeOut 1s forwards 1.5s; }
             @keyframes fadeOut { to { opacity:0; visibility:hidden; } }
             
-            body { font-family:sans-serif; background:#f4f7f6; margin:0; padding-bottom:80px; }
-            .nav { background:${u.color}; color:white; padding:15px; text-align:center; position:sticky; top:0; z-index:500; }
-            .tabs { display:flex; background:white; position:sticky; top:46px; z-index:490; box-shadow:0 2px 5px rgba(0,0,0,0.1); overflow-x:auto; }
-            .tab { flex:none; width:100px; padding:12px; text-align:center; cursor:pointer; font-weight:bold; color:#888; }
-            .tab.active { color:${u.color}; border-bottom:3px solid ${u.color}; }
-            .container { max-width:500px; margin:20px auto; padding:0 15px; }
-            .card { background:white; padding:15px; border-radius:15px; margin-bottom:15px; box-shadow:0 4px 12px rgba(0,0,0,0.05); }
-            .btn-user { position:fixed; bottom:20px; left:20px; width:60px; height:60px; background:${u.color}; border-radius:50%; border:3px solid white; color:white; display:flex; justify-content:center; align-items:center; font-size:22px; cursor:pointer; z-index:600; overflow:hidden; }
-            .section { display:none; margin-top:60px; } .active-sec { display:block; }
-            .nov-img { width:100%; height:200px; object-fit:cover; border-radius:10px; margin-bottom:10px; }
+            .nav { position:fixed; top:0; width:100%; z-index:1000; padding:15px; box-sizing:border-box; text-align:center; font-weight:bold; }
+            .tabs { position:fixed; top:50px; width:100%; display:flex; z-index:1000; justify-content:center; padding:10px 0; }
+            .tab { padding:10px 15px; margin:0 5px; cursor:pointer; font-size:0.8em; opacity:0.6; transition:0.3s; }
+            .tab.active { opacity:1; background:rgba(255,255,255,0.15); border-radius:12px; }
+            
+            .container { max-width:450px; margin:110px auto 30px; padding:0 20px; }
+            .card { padding:20px; margin-bottom:20px; }
+            .btn-user { position:fixed; bottom:25px; left:25px; width:55px; height:55px; border-radius:50%; display:flex; justify-content:center; align-items:center; cursor:pointer; z-index:1500; font-size:20px; border:2px solid rgba(255,255,255,0.3); overflow:hidden; background:${u.color}; }
+            .section { display:none; } .active-sec { display:block; }
+            .portada { width:65px; height:90px; border-radius:8px; float:left; margin-right:15px; object-fit:cover; }
         </style>
     </head>
     <body>
-        <div id="splash">
-            <img src="URL_DE_TU_LOGO_AQUI" style="width:150px; animation: pulse 1.5s infinite;">
-        </div>
-        <style> @keyframes pulse { 0%{transform:scale(1);} 50%{transform:scale(1.1);} 100%{transform:scale(1);} } </style>
+        <div id="splash"><img src="TU_LOGO_AQUI" style="width:120px; animation: pulse 1s infinite;"></div>
+        <style>@keyframes pulse { 50%{transform:scale(1.1); opacity:0.7;} }</style>
 
-        <div class="nav"><b>BIBLIOTECA MASTER</b></div>
+        <div class="nav glass" style="border-radius:0 0 20px 20px; background:${u.color}55;">BIBLIOTECA MASTER</div>
+        
         <div class="tabs">
-            <div class="tab active" onclick="switchTab('nov', this)">📢 Novs</div>
-            <div class="tab" onclick="switchTab('lib', this)">📚 Libros</div>
-            <div class="tab" onclick="switchTab('pre', this)">🤝 Prest.</div>
-            <div class="tab" onclick="switchTab('tor', this)">🏆 Torneos</div>
+            <div class="tab glass active" onclick="ver('nov', this)">📢 Novs</div>
+            <div class="tab glass" onclick="ver('lib', this)">📚 Libros</div>
+            <div class="tab glass" onclick="ver('pre', this)">🤝 Prest</div>
+            <div class="tab glass" onclick="ver('tor', this)">🏆 Torneos</div>
         </div>
 
-        <div class="btn-user" onclick="switchTab('adj', this)">${avatar}</div>
+        <div class="btn-user" onclick="ver('adj', this)">${avatar}</div>
 
         <div class="container">
             <div id="nov" class="section active-sec">
-                ${req.session.rol === 'admin' ? `
-                    <div class="card">
-                        <b>Publicar Novedad</b>
-                        <form action="/admin/novedad" method="POST" enctype="multipart/form-data">
-                            <input name="titulo" placeholder="Título del aviso" required>
-                            <textarea name="texto" placeholder="Escribe la noticia..." style="width:100%; padding:10px; border-radius:10px; border:1px solid #ddd;"></textarea>
-                            <input type="file" name="imagen" accept="image/*">
-                            <button style="background:${u.color}; color:white; border:none; padding:10px; border-radius:8px;">Publicar</button>
-                        </form>
-                    </div>` : ''}
-                ${novedades.map(n => `
-                    <div class="card">
-                        ${n.imagen ? `<img src="${n.imagen}" class="nov-img">` : ''}
-                        <h3 style="margin:0;">${n.titulo}</h3>
-                        <p style="color:#555; font-size:0.9em;">${n.texto}</p>
-                        <small style="color:#999;">${n.fecha}</small>
-                    </div>`).join('')}
+                ${req.session.rol === 'admin' ? `<div class="card glass"><b>Añadir Novedad</b><form action="/admin/novedad" method="POST" enctype="multipart/form-data"><input name="titulo" placeholder="Título"><textarea name="texto" placeholder="Mensaje..."></textarea><input type="file" name="imagen" accept="image/*"><button style="background:${u.color};">Publicar</button></form></div>` : ''}
+                ${novedades.map(n => `<div class="card glass">${n.imagen ? `<img src="${n.imagen}" style="width:100%; border-radius:12px; margin-bottom:15px;">`:''}<h3>${n.titulo}</h3><p style="opacity:0.8; font-size:0.9em;">${n.texto}</p><small style="opacity:0.5;">${n.fecha}</small></div>`).join('')}
             </div>
 
             <div id="lib" class="section">
-                 <p style="text-align:center;">Sección de libros cargada.</p>
+                ${req.session.rol === 'admin' ? `<div class="card glass"><b>Añadir Libro</b><form action="/admin/nuevo-libro" method="POST" enctype="multipart/form-data"><input name="titulo" placeholder="Título"><input name="autor" placeholder="Autor"><input type="file" name="portada" accept="image/*"><button style="background:${u.color};">Añadir</button></form></div>` : ''}
+                ${libros.map(l => `
+                    <div class="card glass">
+                        <img src="${l.portada}" class="portada">
+                        <b>${l.titulo}</b><br><small style="opacity:0.7;">${l.autor}</small>
+                        <form action="/reservar" method="POST" style="clear:both; padding-top:15px;">
+                            <input type="hidden" name="libroId" value="${l._id}"><input type="hidden" name="libroTitulo" value="${l.titulo}">
+                            <input name="curso" placeholder="Tu curso" required style="width:60%; display:inline-block;">
+                            <button style="width:35%; background:#2ecc71; display:inline-block;">Pedir</button>
+                        </form>
+                        <details style="margin-top:10px;"><summary style="font-size:0.8em; opacity:0.6; cursor:pointer;">Reseñas (${l.reseñas.length})</summary>
+                            ${l.reseñas.map(r => `<div style="font-size:0.8em; background:rgba(255,255,255,0.05); padding:10px; border-radius:10px; margin-top:5px;"><b>${r.usuario}:</b> ${"⭐".repeat(r.puntos)}<br>${r.texto}</div>`).join('')}
+                        </details>
+                    </div>`).join('')}
             </div>
-            
+
             <div id="pre" class="section">
-                <p style="text-align:center;">Sección de préstamos cargada.</p>
+                ${misReservas.map(r => `
+                    <div class="card glass">
+                        <b>${r.libroTitulo}</b><br><small style="opacity:0.7;">Prestado a: ${r.usuario}</small>
+                        <form action="/devolver/${r._id}" method="POST" style="margin-top:10px;">
+                            <input type="hidden" name="libroId" value="${r.libroId}">
+                            <select name="estrellas"><option value="">Puntuar...</option><option value="5">⭐⭐⭐⭐⭐</option><option value="3">⭐⭐⭐</option><option value="1">⭐</option></select>
+                            <textarea name="comentario" placeholder="Comentario opcional..."></textarea>
+                            <button style="background:#e74c3c;">Devolver</button>
+                        </form>
+                    </div>`).join('')}
+                ${misReservas.length === 0 ? '<p style="text-align:center; opacity:0.5;">No tienes libros ahora.</p>' : ''}
             </div>
 
             <div id="tor" class="section">
-                <p style="text-align:center;">Sección de torneos cargada.</p>
+                ${req.session.rol === 'admin' ? `<div class="card glass"><b>Nuevo Torneo</b><form action="/admin/nuevo-torneo" method="POST"><input name="nombre" placeholder="Nombre"><input type="date" name="fecha"><button style="background:${u.color};">Crear</button></form></div>` : ''}
+                ${torneos.map(t => `<div class="card glass">🏆 <b>${t.nombre}</b><br><small style="opacity:0.7;">${t.fecha}</small></div>`).join('')}
             </div>
 
             <div id="adj" class="section">
-                <div class="card" style="text-align:center;">
-                    <div style="width:80px; height:80px; background:${u.color}; border-radius:50%; margin:0 auto 10px; display:flex; justify-content:center; align-items:center; color:white; font-size:30px; border:4px solid #eee; overflow:hidden;">${avatar}</div>
+                <div class="card glass" style="text-align:center;">
+                    <div style="width:85px; height:85px; background:${u.color}; border-radius:50%; margin:0 auto 15px; display:flex; justify-content:center; align-items:center; font-size:32px; border:3px solid white; overflow:hidden;">${avatar}</div>
                     <form action="/ajustes" method="POST" enctype="multipart/form-data">
                         <input type="file" name="foto" accept="image/*">
                         <input type="color" name="color" value="${u.color}">
-                        <button style="background:${u.color}; color:white; border:none; padding:10px; border-radius:10px;">Guardar Cambios</button>
+                        <button style="background:${u.color};">Guardar Cambios</button>
                     </form>
-                    <a href="/salir" style="color:red; text-decoration:none; font-weight:bold;">Cerrar Sesión</a>
+                    <a href="/salir" style="color:#ff7675; text-decoration:none; display:inline-block; margin-top:15px; font-weight:bold;">Cerrar Sesión</a>
                 </div>
             </div>
         </div>
 
         <script>
-            function switchTab(id, el) {
+            function ver(id, el) {
                 document.querySelectorAll('.section').forEach(s => s.classList.remove('active-sec'));
                 document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
                 document.getElementById(id).classList.add('active-sec');
@@ -195,4 +225,4 @@ app.get('/', async (req, res) => {
     </html>`);
 });
 
-app.listen(PORT, () => console.log('Servidor con Splash y Login Pro listo'));
+app.listen(PORT, () => console.log('Interfaz Glassmorphism Funcionando'));
